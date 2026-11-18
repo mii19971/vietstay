@@ -37,52 +37,55 @@ export function HotelCard({
   style?: StyleProp<ViewStyle>;
 }) {
   const fromPrice = price ?? Math.min(...hotel.rooms.map((r) => r.price));
+  // Nút yêu thích là anh em (không phải con) của nút thẻ: trên web Pressable role="button"
+  // render thành <button>, và HTML không cho phép <button> lồng trong <button>.
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={hotel.name}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }, style]}
-    >
-      <View>
+    <View style={[styles.card, style]}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={hotel.name}
+        style={({ pressed }) => [styles.cardInner, pressed && { opacity: 0.92 }]}
+      >
         <RemoteImage uri={hotel.images[0]} style={styles.image} />
-        <View style={styles.favWrap}>
-          <FavoriteButton hotelId={hotel.id} />
-        </View>
-      </View>
-      <View style={styles.body}>
-        <Stars count={hotel.stars} size={12} />
-        <Text style={styles.name} numberOfLines={1}>
-          {hotel.name}
-        </Text>
-        <View style={styles.row}>
-          <Ionicons name="location-outline" size={14} color={colors.muted} />
-          <Text style={styles.muted} numberOfLines={1}>
-            {hotel.city}
+        <View style={styles.body}>
+          <Stars count={hotel.stars} size={12} />
+          <Text style={styles.name} numberOfLines={1}>
+            {hotel.name}
           </Text>
+          <View style={styles.row}>
+            <Ionicons name="location-outline" size={14} color={colors.muted} />
+            <Text style={styles.muted} numberOfLines={1}>
+              {hotel.city}
+            </Text>
+          </View>
+          <View style={[styles.row, { marginTop: 4 }]}>
+            <RatingBadge rating={hotel.rating} />
+            <Text style={styles.ratingText}>{ratingLabel(hotel.rating)}</Text>
+            <Text style={styles.muted}>· {formatNumber(hotel.reviewCount)} đánh giá</Text>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={styles.muted}>Từ</Text>
+            <Text style={styles.price}>{formatVND(fromPrice)}</Text>
+            <Text style={styles.muted}>/đêm</Text>
+          </View>
+          {nights && nights > 1 ? (
+            <Text style={[styles.muted, { fontSize: 12 }]}>
+              {formatVND(fromPrice * nights)} cho {nights} đêm (chưa gồm thuế)
+            </Text>
+          ) : null}
         </View>
-        <View style={[styles.row, { marginTop: 4 }]}>
-          <RatingBadge rating={hotel.rating} />
-          <Text style={styles.ratingText}>{ratingLabel(hotel.rating)}</Text>
-          <Text style={styles.muted}>· {formatNumber(hotel.reviewCount)} đánh giá</Text>
-        </View>
-        <View style={styles.priceRow}>
-          <Text style={styles.muted}>Từ</Text>
-          <Text style={styles.price}>{formatVND(fromPrice)}</Text>
-          <Text style={styles.muted}>/đêm</Text>
-        </View>
-        {nights && nights > 1 ? (
-          <Text style={[styles.muted, { fontSize: 12 }]}>
-            {formatVND(fromPrice * nights)} cho {nights} đêm (chưa gồm thuế)
-          </Text>
-        ) : null}
+      </Pressable>
+      <View style={styles.favWrap}>
+        <FavoriteButton hotelId={hotel.id} />
       </View>
-    </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.card, borderRadius: radius.lg, overflow: 'hidden', ...shadow },
+  card: { backgroundColor: colors.card, borderRadius: radius.lg, ...shadow },
+  cardInner: { borderRadius: radius.lg, overflow: 'hidden' },
   image: { width: '100%', height: 180 },
   favWrap: { position: 'absolute', top: 10, right: 10 },
   favBtn: {
