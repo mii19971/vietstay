@@ -5,6 +5,19 @@
 
 ## Chạy ứng dụng
 
+App lấy dữ liệu từ **VietStay API** (.NET, thư mục `../vietstayapi`) — hãy chạy API trước.
+Khai báo địa chỉ API bằng cách sao chép `.env.example` thành `.env.local` và sửa `EXPO_PUBLIC_API_URL`:
+
+| Chạy app trên | `EXPO_PUBLIC_API_URL` |
+|---|---|
+| Web / iOS simulator (cùng máy với API) | `http://localhost:5045` (mặc định nếu không khai báo) |
+| Android emulator | `http://10.0.2.2:5045` (mặc định trên Android) |
+| Điện thoại thật qua Expo Go | `http://<IP-LAN-máy-chạy-API>:5045` — API phải lắng nghe trên IP đó và mở firewall |
+
+Cổng `5045` là profile `http` của API; nếu chạy API bằng IIS Express trong Visual Studio thì dùng cổng IIS Express
+(xem `Properties/launchSettings.json`). Sau khi sửa `.env.local`, tải lại app.
+Gọi API từ trình duyệt cần origin của app nằm trong `Cors:Origins` của API (mặc định có `http://localhost:8081`).
+
 ```bash
 npm install
 npm run web       # mở trên trình duyệt
@@ -29,8 +42,10 @@ npm run typecheck
   sắp xếp (đề xuất/giá/đánh giá), bộ lọc giá tối đa, hạng sao, điểm đánh giá, tiện nghi.
 - **Chi tiết khách sạn**: thư viện ảnh, tiện nghi, danh sách loại phòng với giá theo số đêm, số phòng còn lại, đánh giá.
 - **Đặt phòng**: thông tin liên hệ (có kiểm tra hợp lệ), yêu cầu đặc biệt, phương thức thanh toán, chi tiết giá + thuế.
-- **Chuyến đi**: đơn sắp tới / đã qua / đã hủy, xem chi tiết, hủy đơn.
-- **Yêu thích** và **Tài khoản** (lưu thông tin để điền sẵn khi đặt).
+- **Tài khoản**: đăng ký / đăng nhập (JWT), sửa họ tên & số điện thoại, đăng xuất. Token lưu trong
+  Keychain/Keystore (expo-secure-store) trên điện thoại, localStorage trên web.
+- **Đặt phòng, Chuyến đi, Yêu thích** cần đăng nhập và được lưu trên server theo tài khoản:
+  đơn sắp tới / đã qua / đã hủy, xem chi tiết, hủy đơn; khách sạn yêu thích đồng bộ giữa các thiết bị.
 - Giao diện đáp ứng: 1 cột trên điện thoại, 2–3 cột trên tablet/web.
 
 ## Cấu trúc
@@ -43,17 +58,16 @@ src/
     hotel/[id].tsx     #   Chi tiết khách sạn
     checkout.tsx       #   Xác nhận đặt phòng
     booking/[id].tsx   #   Chi tiết / xác nhận đơn
+    login.tsx, register.tsx  # Đăng nhập / đăng ký (modal)
   components/          # UI dùng chung (HotelCard, SearchForm, DateRangePicker, ...)
-  services/api.ts      # Lớp API — hiện là dữ liệu giả lập
-  data/                # Dữ liệu mẫu khách sạn, thành phố
-  store/AppStore.tsx   # State toàn cục: đơn đặt, yêu thích, hồ sơ
+  config.ts            # Địa chỉ API (EXPO_PUBLIC_API_URL)
+  services/
+    api.ts             # Các hàm gọi API (khách sạn, tài khoản, đặt phòng)
+    http.ts            # fetch + token + chuyển lỗi ProblemDetails thành ApiError
+    tokenStore.ts      # Lưu token (SecureStore / localStorage)
+  hooks/useApi.ts      # Tải dữ liệu với trạng thái loading / lỗi / thử lại
+  store/AppStore.tsx   # State toàn cục: phiên đăng nhập, đơn đặt, yêu thích
   utils/               # Ngày tháng, định dạng tiền, tiêu chí tìm kiếm
 ```
 
-## Kết nối backend thật
-
-Hiện tại dữ liệu khách sạn là dữ liệu mẫu trong `src/data/hotels.ts`, còn đơn đặt phòng được lưu trên
-thiết bị (AsyncStorage / localStorage). Mọi màn hình chỉ gọi các hàm trong `src/services/api.ts`
-(`searchHotels`, `getHotel`, `getRoomOffers`, `createBooking`, `cancelBooking`, ...), nên khi có backend
-chỉ cần thay phần thân các hàm đó bằng lời gọi `fetch` tới server. Phần thanh toán hiện chỉ ghi nhận
-phương thức, chưa tích hợp cổng thanh toán.
+Phần thanh toán hiện chỉ ghi nhận phương thức khách chọn, chưa tích hợp cổng thanh toán.

@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { FavoriteButton } from '@/components/HotelCard';
 import { StayPickers } from '@/components/SearchForm';
@@ -9,6 +9,7 @@ import {
   Card,
   Divider,
   EmptyState,
+  ErrorState,
   InfoRow,
   Loading,
   RatingBadge,
@@ -16,12 +17,11 @@ import {
   Screen,
   SectionTitle,
   Stars,
-  type IconName,
 } from '@/components/ui';
-import { AMENITIES } from '@/data/hotels';
-import { getHotel, getRoomOffers, type RoomOffer } from '@/services/api';
+import { amenityInfo } from '@/data/amenities';
+import { useApi } from '@/hooks/useApi';
+import { getHotel, getRoomOffers } from '@/services/api';
 import { colors, MAX_WIDTH, radius } from '@/theme';
-import type { Hotel } from '@/types';
 import { criteriaToParams, parseCriteria } from '@/utils/criteria';
 import { nightsBetween } from '@/utils/date';
 import { formatNumber, formatVND, ratingLabel } from '@/utils/format';
@@ -59,26 +59,22 @@ export default function HotelScreen() {
   const paramsKey = JSON.stringify(params);
   const criteria = useMemo(() => parseCriteria(params), [paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [hotel, setHotel] = useState<Hotel | null | undefined>(undefined);
-  const [offers, setOffers] = useState<RoomOffer[]>([]);
+  const hotelReq = useApi(() => getHotel(params.id), [params.id]);
+  const offersReq = useApi(() => getRoomOffers(params.id, criteria), [params.id, criteria]);
+  const offers = offersReq.data ?? [];
 
-  useEffect(() => {
-    getHotel(params.id).then((h) => setHotel(h ?? null));
-  }, [params.id]);
-
-  // Tải lại phòng trống mỗi khi quay lại màn hình (vd. sau khi vừa đặt phòng).
+  // Tải lại phòng trống khi quay lại màn hình (vd. sau khi vừa đặt phòng); bỏ qua lần focus đầu.
+  const focusedOnce = useRef(false);
+  const reloadOffers = offersReq.reload;
   useFocusEffect(
     useCallback(() => {
-      let alive = true;
-      getRoomOffers(params.id, criteria).then((o) => alive && setOffers(o));
-      return () => {
-        alive = false;
-      };
-    }, [params.id, criteria]),
+      if (focusedOnce.current) reloadOffers();
+      focusedOnce.current = true;
+    }, [reloadOffers]),
   );
 
-  if (hotel === undefined) return <Loading />;
-  if (hotel === null) {
+  const hotel = hotelReq.data;
+  if (hotelReq.errorStatus === 404) {
     return (
       <EmptyState
         icon="alert-circle-outline"
@@ -87,6 +83,8 @@ export default function HotelScreen() {
       />
     );
   }
+  if (hotelReq.error) return <ErrorState message={hotelReq.error} onRetry={hotelReq.reload} />;
+  if (!hotel) return <Loading />;
 
   const nights = nightsBetween(criteria.checkIn, criteria.checkOut);
 
@@ -113,8 +111,8 @@ export default function HotelScreen() {
           <View style={styles.amenities}>
             {hotel.amenities.map((a) => (
               <View key={a} style={styles.amenity}>
-                <Ionicons name={AMENITIES[a].icon as IconName} size={18} color={colors.primary} />
-                <Text style={styles.amenityText}>{AMENITIES[a].label}</Text>
+                <Ionicons name={amenityInfo(a).icon} size={18} color={colors.primary} />
+                <Text style={styles.amenityText}>{amenityInfo(a).label}</Text>
               </View>
             ))}
           </View>
@@ -125,9 +123,10 @@ export default function HotelScreen() {
           <StayPickers value={criteria} onChange={(c) => router.setParams(criteriaToParams(c))} />
         </View>
 
-        {offers.map(({ room, remaining, fitsGuests }) => {
+        {offersReq.error && <ErrorState message={offersReq.error} onRetry={offersReq.reload} />}
+        {offersReq.loading && !offersReq.data && <Loading />}
+        {offers.map(({ room, remaining, fitsGuests, bookable }) => {
           const enough = remaining >= criteria.rooms;
-          const bookable = enough && fitsGuests;
           return (
             <Card key={room.id} style={styles.roomCard}>
               <RemoteImage uri={room.image} style={styles.roomImage} />

@@ -280,6 +280,18 @@ export function EmptyState({
   );
 }
 
+/** Lỗi tải dữ liệu kèm nút thử lại. */
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <EmptyState
+      icon="cloud-offline-outline"
+      title="Không tải được dữ liệu"
+      message={message}
+      action={onRetry ? <Button title="Thử lại" variant="outline" icon="refresh" onPress={onRetry} /> : undefined}
+    />
+  );
+}
+
 export function InfoRow({ icon, children }: { icon: IconName; children: ReactNode }) {
   return (
     <View style={styles.infoRow}>

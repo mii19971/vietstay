@@ -28,9 +28,32 @@ export interface Room {
   maxGuests: number; // số khách tối đa / phòng
   price: number; // VND / đêm
   image: string;
-  inventory: number; // tổng số phòng loại này
   freeCancellation: boolean;
   breakfastIncluded: boolean;
+}
+
+/** Khách sạn dạng rút gọn cho danh sách (tìm kiếm, nổi bật, yêu thích). */
+export interface HotelSummary {
+  id: string;
+  name: string;
+  cityId: string;
+  city: string;
+  address: string;
+  stars: number;
+  rating: number;
+  reviewCount: number;
+  image: string;
+  amenities: AmenityKey[];
+  /** Giá/đêm thấp nhất (khi tìm kiếm: của phòng còn trống và đủ chỗ). */
+  minPrice: number;
+}
+
+export interface RoomOffer {
+  room: Room;
+  remaining: number;
+  fitsGuests: boolean;
+  bookable: boolean;
+  totalBeforeTax: number;
 }
 
 export interface Hotel {
@@ -81,10 +104,13 @@ export interface Booking {
   guestName: string;
   guestEmail: string;
   guestPhone: string;
-  note?: string;
+  note?: string | null;
   paymentMethod: PaymentMethod;
   status: BookingStatus;
+  /** Server tính: còn hủy được không (đã xác nhận và chưa tới ngày nhận phòng). */
+  canCancel: boolean;
   createdAt: string; // ISO datetime
+  cancelledAt?: string | null;
 }
 
 export interface SearchCriteria {
@@ -105,8 +131,15 @@ export interface SearchFilters {
   sort: SortOption;
 }
 
-export interface Profile {
+export interface User {
+  id: string;
   name: string;
   email: string;
   phone: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  expiresAt: string;
+  user: User;
 }

@@ -1,14 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Grid } from '@/components/Grid';
 import { HotelCard } from '@/components/HotelCard';
 import { datesLabel, guestsLabel, SearchForm } from '@/components/SearchForm';
 import { Sheet } from '@/components/Sheet';
-import { Button, Chip, EmptyState, Loading, Screen } from '@/components/ui';
-import { AMENITIES } from '@/data/hotels';
-import { searchHotels, type HotelResult } from '@/services/api';
+import { Button, Chip, EmptyState, ErrorState, Loading, Screen } from '@/components/ui';
+import { AMENITIES } from '@/data/amenities';
+import { useApi } from '@/hooks/useApi';
+import { searchHotels } from '@/services/api';
 import { colors, radius } from '@/theme';
 import type { AmenityKey, SearchCriteria, SearchFilters, SortOption } from '@/types';
 import { criteriaToParams, parseCriteria } from '@/utils/criteria';
@@ -38,18 +39,10 @@ export default function SearchScreen() {
 
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const [draft, setDraft] = useState<SearchFilters>(EMPTY_FILTERS);
-  const [results, setResults] = useState<HotelResult[] | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    setResults(null);
-    searchHotels(criteria, filters).then((r) => alive && setResults(r));
-    return () => {
-      alive = false;
-    };
-  }, [criteria, filters]);
+  const search = useApi(() => searchHotels(criteria, filters), [criteria, filters]);
+  const results = search.loading ? null : search.data;
 
   const nights = nightsBetween(criteria.checkIn, criteria.checkOut);
   const activeCount = countActive(filters);
@@ -102,9 +95,11 @@ export default function SearchScreen() {
           ))}
         </ScrollView>
 
-        {results === null ? (
+        {search.error ? (
+          <ErrorState message={search.error} onRetry={search.reload} />
+        ) : !results ? (
           <Loading />
-        ) : results.length === 0 ? (
+        ) : results.items.length === 0 ? (
           <EmptyState
             icon="bed-outline"
             title="Không tìm thấy khách sạn phù hợp"
@@ -117,17 +112,16 @@ export default function SearchScreen() {
           />
         ) : (
           <>
-            <Text style={styles.count}>{results.length} khách sạn còn phòng</Text>
+            <Text style={styles.count}>{results.total} khách sạn còn phòng</Text>
             <Grid
-              data={results}
-              keyOf={(r) => r.hotel.id}
-              render={(r) => (
+              data={results.items}
+              keyOf={(h) => h.id}
+              render={(h) => (
                 <HotelCard
-                  hotel={r.hotel}
-                  price={r.minPrice}
+                  hotel={h}
                   nights={nights}
                   onPress={() =>
-                    router.push({ pathname: '/hotel/[id]', params: { id: r.hotel.id, ...criteriaToParams(criteria) } })
+                    router.push({ pathname: '/hotel/[id]', params: { id: h.id, ...criteriaToParams(criteria) } })
                   }
                 />
               )}

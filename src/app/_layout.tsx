@@ -24,6 +24,8 @@ export default function RootLayout() {
           <Stack.Screen name="hotel/[id]" options={{ title: 'Chi tiết khách sạn' }} />
           <Stack.Screen name="checkout" options={{ title: 'Xác nhận đặt phòng' }} />
           <Stack.Screen name="booking/[id]" options={{ title: 'Chi tiết đặt phòng' }} />
+          <Stack.Screen name="login" options={{ title: 'Đăng nhập', presentation: 'modal' }} />
+          <Stack.Screen name="register" options={{ title: 'Đăng ký', presentation: 'modal' }} />
         </Stack>
       </AppStoreProvider>
     </SafeAreaProvider>

@@ -8,6 +8,7 @@ import {
   Card,
   Divider,
   EmptyState,
+  ErrorState,
   InfoRow,
   Loading,
   RemoteImage,
@@ -16,10 +17,11 @@ import {
   TextField,
 } from '@/components/ui';
 import { PAYMENT_METHODS } from '@/data/payment';
-import { BookingError, calcPrice, getHotel, TAX_RATE } from '@/services/api';
+import { useApi } from '@/hooks/useApi';
+import { ApiError, calcPrice, getHotel, TAX_RATE } from '@/services/api';
 import { useAppStore } from '@/store/AppStore';
 import { colors, radius } from '@/theme';
-import type { Hotel, PaymentMethod } from '@/types';
+import type { PaymentMethod } from '@/types';
 import { parseCriteria } from '@/utils/criteria';
 import { formatLongDate, nightsBetween } from '@/utils/date';
 import { notify } from '@/utils/dialog';
@@ -31,32 +33,32 @@ export default function CheckoutScreen() {
   const params = useLocalSearchParams<{ hotelId: string; roomId: string }>();
   const paramsKey = JSON.stringify(params);
   const criteria = useMemo(() => parseCriteria(params), [paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const { profile, book, saveProfile } = useAppStore();
+  const { ready, user, book } = useAppStore();
 
-  const [hotel, setHotel] = useState<Hotel | null | undefined>(undefined);
-  const [name, setName] = useState(profile?.name ?? '');
-  const [email, setEmail] = useState(profile?.email ?? '');
-  const [phone, setPhone] = useState(profile?.phone ?? '');
+  const hotelReq = useApi(() => getHotel(params.hotelId), [params.hotelId]);
+  const [name, setName] = useState(user?.name ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [phone, setPhone] = useState(user?.phone ?? '');
   const [note, setNote] = useState('');
   const [payment, setPayment] = useState<PaymentMethod>('pay_at_hotel');
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Điền sẵn thông tin liên hệ từ tài khoản (kể cả khi vừa đăng nhập xong rồi quay lại màn hình này).
   useEffect(() => {
-    getHotel(params.hotelId).then((h) => setHotel(h ?? null));
-  }, [params.hotelId]);
+    if (!user) return;
+    setName((v) => v || user.name);
+    setEmail((v) => v || user.email);
+    setPhone((v) => v || user.phone);
+  }, [user]);
 
-  // Khi mở trực tiếp bằng link, hồ sơ có thể được tải xong sau lần render đầu.
-  useEffect(() => {
-    if (!profile) return;
-    setName((v) => v || profile.name);
-    setEmail((v) => v || profile.email);
-    setPhone((v) => v || profile.phone);
-  }, [profile]);
-
+  const hotel = hotelReq.data;
   const room = hotel?.rooms.find((r) => r.id === params.roomId);
 
-  if (hotel === undefined) return <Loading />;
+  if (!ready || (hotelReq.loading && !hotel)) return <Loading />;
+  if (hotelReq.error && hotelReq.errorStatus !== 404) {
+    return <ErrorState message={hotelReq.error} onRetry={hotelReq.reload} />;
+  }
   if (!hotel || !room) {
     return (
       <EmptyState
@@ -64,6 +66,22 @@ export default function CheckoutScreen() {
         title="Không tìm thấy phòng"
         message="Liên kết đặt phòng không hợp lệ hoặc đã hết hạn."
         action={<Button title="Về trang chủ" onPress={() => router.replace('/')} />}
+      />
+    );
+  }
+
+  if (!user) {
+    return (
+      <EmptyState
+        icon="person-circle-outline"
+        title="Đăng nhập để đặt phòng"
+        message={`${room.name} · ${hotel.name}. Đơn đặt phòng được lưu vào tài khoản để bạn xem lại và hủy khi cần.`}
+        action={
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Button title="Đăng nhập" onPress={() => router.push('/login')} />
+            <Button title="Tạo tài khoản" variant="outline" onPress={() => router.push('/register')} />
+          </View>
+        }
       />
     );
   }
@@ -94,11 +112,16 @@ export default function CheckoutScreen() {
         note,
         paymentMethod: payment,
       });
-      // Ghi nhớ thông tin liên hệ cho lần đặt sau.
-      if (!profile) await saveProfile({ name: name.trim(), email: email.trim(), phone: phone.trim() });
       router.replace({ pathname: '/booking/[id]', params: { id: booking.id, created: '1' } });
     } catch (err) {
-      notify('Không thể đặt phòng', err instanceof BookingError ? err.message : 'Đã có lỗi xảy ra, vui lòng thử lại.');
+      if (err instanceof ApiError) {
+        // Hiển thị lỗi kiểm tra của server ngay dưới ô nhập tương ứng.
+        const fe = err.fieldErrors;
+        setErrors({ name: fe.guestName?.[0], email: fe.guestEmail?.[0], phone: fe.guestPhone?.[0] });
+        notify(err.status === 409 ? 'Hết phòng' : 'Không thể đặt phòng', err.details);
+      } else {
+        notify('Không thể đặt phòng', 'Đã có lỗi xảy ra, vui lòng thử lại.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -107,7 +130,7 @@ export default function CheckoutScreen() {
   return (
     <Screen>
       <Card style={styles.summary}>
-        <RemoteImage uri={hotel.images[0]} style={styles.thumb} />
+        <RemoteImage uri={hotel.images[0] ?? ''} style={styles.thumb} />
         <View style={{ flex: 1, gap: 3 }}>
           <Text style={styles.hotelName}>{hotel.name}</Text>
           <Text style={styles.roomName}>{room.name}</Text>

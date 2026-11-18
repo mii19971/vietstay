@@ -1,26 +1,24 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Grid } from '@/components/Grid';
 import { HotelCard } from '@/components/HotelCard';
 import { SearchForm } from '@/components/SearchForm';
-import { Card, RemoteImage, Screen, SectionTitle } from '@/components/ui';
+import { Card, ErrorState, Loading, RemoteImage, Screen, SectionTitle } from '@/components/ui';
+import { useApi } from '@/hooks/useApi';
 import { getCities, getFeaturedHotels } from '@/services/api';
 import { useAppStore } from '@/store/AppStore';
 import { colors, radius } from '@/theme';
-import type { Hotel, SearchCriteria } from '@/types';
+import type { SearchCriteria } from '@/types';
 import { criteriaToParams, defaultCriteria } from '@/utils/criteria';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { profile } = useAppStore();
-  const [featured, setFeatured] = useState<Hotel[]>([]);
+  const { user } = useAppStore();
   const [initial] = useState(defaultCriteria);
-
-  useEffect(() => {
-    getFeaturedHotels().then(setFeatured);
-  }, []);
+  const home = useApi(() => Promise.all([getCities(), getFeaturedHotels()]), []);
+  const [cities, featured] = home.data ?? [[], []];
 
   const search = (c: SearchCriteria) => router.push({ pathname: '/search', params: criteriaToParams(c) });
 
@@ -29,7 +27,7 @@ export default function HomeScreen() {
       <View style={styles.hero}>
         <Text style={styles.brand}>VietStay</Text>
         <Text style={styles.greeting}>
-          {profile?.name ? `Xin chào, ${profile.name.split(' ').pop()}!` : 'Xin chào!'} Hôm nay bạn muốn nghỉ ở đâu?
+          {user ? `Xin chào, ${user.name.trim().split(' ').pop()}!` : 'Xin chào!'} Hôm nay bạn muốn nghỉ ở đâu?
         </Text>
       </View>
 
@@ -37,34 +35,42 @@ export default function HomeScreen() {
         <SearchForm initial={initial} onSubmit={search} />
       </Card>
 
-      <SectionTitle>Điểm đến phổ biến</SectionTitle>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-        {getCities().map((city) => (
-          <Pressable
-            key={city.id}
-            onPress={() => search({ ...initial, q: city.name })}
-            accessibilityRole="button"
-            accessibilityLabel={`Tìm khách sạn ở ${city.name}`}
-            style={styles.city}
-          >
-            <RemoteImage uri={city.image} style={StyleSheet.absoluteFill} />
-            <View style={styles.cityOverlay} />
-            <Text style={styles.cityName}>{city.name}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      {home.error ? (
+        <ErrorState message={home.error} onRetry={home.reload} />
+      ) : home.loading && !home.data ? (
+        <Loading />
+      ) : (
+        <>
+          <SectionTitle>Điểm đến phổ biến</SectionTitle>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+            {cities.map((city) => (
+              <Pressable
+                key={city.id}
+                onPress={() => search({ ...initial, q: city.name })}
+                accessibilityRole="button"
+                accessibilityLabel={`Tìm khách sạn ở ${city.name}`}
+                style={styles.city}
+              >
+                <RemoteImage uri={city.image} style={StyleSheet.absoluteFill} />
+                <View style={styles.cityOverlay} />
+                <Text style={styles.cityName}>{city.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
 
-      <SectionTitle>Được đánh giá cao nhất</SectionTitle>
-      <Grid
-        data={featured}
-        keyOf={(h) => h.id}
-        render={(h) => (
-          <HotelCard
-            hotel={h}
-            onPress={() => router.push({ pathname: '/hotel/[id]', params: { id: h.id, ...criteriaToParams(initial) } })}
+          <SectionTitle>Được đánh giá cao nhất</SectionTitle>
+          <Grid
+            data={featured}
+            keyOf={(h) => h.id}
+            render={(h) => (
+              <HotelCard
+                hotel={h}
+                onPress={() => router.push({ pathname: '/hotel/[id]', params: { id: h.id, ...criteriaToParams(initial) } })}
+              />
+            )}
           />
-        )}
-      />
+        </>
+      )}
     </Screen>
   );
 }

@@ -3,8 +3,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StatusPill } from '@/components/BookingCard';
-import { Button, Card, Divider, EmptyState, InfoRow, Loading, RemoteImage, Screen } from '@/components/ui';
-import { BookingError, canCancel } from '@/services/api';
+import { Button, Card, Divider, EmptyState, ErrorState, InfoRow, Loading, RemoteImage, Screen } from '@/components/ui';
+import { useApi } from '@/hooks/useApi';
+import { ApiError, getBooking } from '@/services/api';
 import { useAppStore } from '@/store/AppStore';
 import { colors, radius } from '@/theme';
 import { formatLongDate } from '@/utils/date';
@@ -23,11 +24,30 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export default function BookingDetailScreen() {
   const { id, created } = useLocalSearchParams<{ id: string; created?: string }>();
-  const { ready, bookings, cancel } = useAppStore();
+  const { ready, user, bookings, cancel } = useAppStore();
   const [cancelling, setCancelling] = useState(false);
+  const cached = bookings.find((b) => b.id === id);
+  // Mở trực tiếp bằng link: đơn chưa có trong danh sách đã tải → hỏi server.
+  const remote = useApi(
+    () => (user && !cached ? getBooking(id) : Promise.resolve(undefined)),
+    [id, user?.id, !!cached],
+  );
 
   if (!ready) return <Loading />;
-  const booking = bookings.find((b) => b.id === id);
+  if (!user) {
+    return (
+      <EmptyState
+        icon="person-circle-outline"
+        title="Đăng nhập để xem đơn đặt phòng"
+        action={<Button title="Đăng nhập" onPress={() => router.push('/login')} />}
+      />
+    );
+  }
+  const booking = cached ?? remote.data;
+  if (!booking && remote.loading) return <Loading />;
+  if (!booking && remote.error && remote.errorStatus !== 404) {
+    return <ErrorState message={remote.error} onRetry={remote.reload} />;
+  }
   if (!booking) {
     return (
       <EmptyState
@@ -49,7 +69,7 @@ export default function BookingDetailScreen() {
         try {
           await cancel(booking.id);
         } catch (err) {
-          notify('Không thể hủy', err instanceof BookingError ? err.message : 'Đã có lỗi xảy ra.');
+          notify('Không thể hủy', err instanceof ApiError ? err.message : 'Đã có lỗi xảy ra.');
         } finally {
           setCancelling(false);
         }
@@ -64,7 +84,7 @@ export default function BookingDetailScreen() {
           <Ionicons name="checkmark-circle" size={44} color={colors.success} />
           <Text style={styles.successTitle}>Đặt phòng thành công!</Text>
           <Text style={[styles.muted, { textAlign: 'center' }]}>
-            Xác nhận đã được gửi tới {booking.guestEmail}. Vui lòng xuất trình mã đặt phòng khi nhận phòng.
+            Đơn đã được lưu trong mục Chuyến đi. Vui lòng xuất trình mã đặt phòng khi nhận phòng.
           </Text>
         </View>
       )}
@@ -96,7 +116,7 @@ export default function BookingDetailScreen() {
         <Row label="Họ tên" value={booking.guestName} />
         <Row label="Email" value={booking.guestEmail} />
         <Row label="Điện thoại" value={booking.guestPhone} />
-        {booking.note && <Row label="Yêu cầu" value={booking.note} />}
+        {!!booking.note && <Row label="Yêu cầu" value={booking.note} />}
         <Divider />
         <Row label="Thanh toán" value={payment?.label ?? ''} />
         <Row label="Tiền phòng" value={formatVND(booking.subtotal)} />
@@ -118,7 +138,7 @@ export default function BookingDetailScreen() {
           })
         }
       />
-      {canCancel(booking) && (
+      {booking.canCancel && (
         <Button title="Hủy đặt phòng" variant="danger" icon="trash-outline" loading={cancelling} onPress={onCancel} />
       )}
       {created === '1' && (

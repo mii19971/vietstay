@@ -1,21 +1,34 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { Grid } from '@/components/Grid';
 import { HotelCard } from '@/components/HotelCard';
-import { Button, EmptyState, Loading, Screen } from '@/components/ui';
-import { getHotelsByIds } from '@/services/api';
+import { LoginPrompt } from '@/components/LoginPrompt';
+import { Button, EmptyState, ErrorState, Loading, Screen } from '@/components/ui';
+import { useApi } from '@/hooks/useApi';
+import { getFavorites } from '@/services/api';
 import { useAppStore } from '@/store/AppStore';
-import type { Hotel } from '@/types';
 
 export default function FavoritesScreen() {
-  const { ready, favorites } = useAppStore();
-  const [hotels, setHotels] = useState<Hotel[] | null>(null);
+  const { ready, user, favorites } = useAppStore();
+  // Tải lại khi danh sách id yêu thích đổi (bấm tim ở màn hình khác).
+  const req = useApi(
+    () => (user ? getFavorites() : Promise.resolve([])),
+    [user?.id, favorites.join(',')],
+  );
 
-  useEffect(() => {
-    if (ready) getHotelsByIds(favorites).then(setHotels);
-  }, [ready, favorites]);
-
-  if (!hotels) return <Loading />;
+  if (!ready) return <Loading />;
+  if (!user) {
+    return (
+      <LoginPrompt
+        icon="heart-outline"
+        title="Lưu khách sạn yêu thích"
+        message="Đăng nhập để lưu khách sạn yêu thích và xem lại trên mọi thiết bị."
+      />
+    );
+  }
+  if (req.error) return <ErrorState message={req.error} onRetry={req.reload} />;
+  if (!req.data) return <Loading />;
+  // Ẩn ngay khách sạn vừa bỏ thích, không chờ tải lại.
+  const hotels = req.data.filter((h) => favorites.includes(h.id));
   if (hotels.length === 0) {
     return (
       <EmptyState

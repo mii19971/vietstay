@@ -1,17 +1,28 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ApiError } from '@/services/api';
 import { useAppStore } from '@/store/AppStore';
 import { colors, radius, shadow } from '@/theme';
-import type { Hotel } from '@/types';
+import type { HotelSummary } from '@/types';
+import { notify } from '@/utils/dialog';
 import { formatNumber, formatVND, ratingLabel } from '@/utils/format';
 import { RatingBadge, RemoteImage, Stars } from './ui';
 
 export function FavoriteButton({ hotelId, size = 22 }: { hotelId: string; size?: number }) {
   const { isFavorite, toggleFavorite } = useAppStore();
   const fav = isFavorite(hotelId);
+  const onPress = async () => {
+    try {
+      // Chưa đăng nhập → mở màn hình đăng nhập (yêu thích được lưu theo tài khoản).
+      if (!(await toggleFavorite(hotelId))) router.push('/login');
+    } catch (err) {
+      notify('Không lưu được yêu thích', err instanceof ApiError ? err.message : 'Đã có lỗi xảy ra.');
+    }
+  };
   return (
     <Pressable
-      onPress={() => toggleFavorite(hotelId)}
+      onPress={onPress}
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={fav ? 'Bỏ khỏi yêu thích' : 'Thêm vào yêu thích'}
@@ -29,14 +40,14 @@ export function HotelCard({
   onPress,
   style,
 }: {
-  hotel: Hotel;
-  /** Giá/đêm thấp nhất; không truyền thì hiển thị giá từ phòng rẻ nhất. */
+  hotel: HotelSummary;
+  /** Giá/đêm hiển thị; mặc định là hotel.minPrice. */
   price?: number;
   nights?: number;
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
-  const fromPrice = price ?? Math.min(...hotel.rooms.map((r) => r.price));
+  const fromPrice = price ?? hotel.minPrice;
   // Nút yêu thích là anh em (không phải con) của nút thẻ: trên web Pressable role="button"
   // render thành <button>, và HTML không cho phép <button> lồng trong <button>.
   return (
@@ -47,7 +58,7 @@ export function HotelCard({
         accessibilityLabel={hotel.name}
         style={({ pressed }) => [styles.cardInner, pressed && { opacity: 0.92 }]}
       >
-        <RemoteImage uri={hotel.images[0]} style={styles.image} />
+        <RemoteImage uri={hotel.image} style={styles.image} />
         <View style={styles.body}>
           <Stars count={hotel.stars} size={12} />
           <Text style={styles.name} numberOfLines={1}>

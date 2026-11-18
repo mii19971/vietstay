@@ -1,39 +1,68 @@
 import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Button, Card, Screen, SectionTitle, TextField } from '@/components/ui';
+import { LoginPrompt } from '@/components/LoginPrompt';
+import { Button, Card, Loading, Screen, SectionTitle, TextField } from '@/components/ui';
+import { API_URL } from '@/config';
+import { ApiError } from '@/services/api';
 import { useAppStore } from '@/store/AppStore';
 import { colors } from '@/theme';
 import { confirmAction, notify } from '@/utils/dialog';
-import { isValidEmail, isValidPhone } from '@/utils/format';
+import { isValidPhone } from '@/utils/format';
 
-type Errors = Partial<Record<'name' | 'email' | 'phone', string>>;
+type Errors = Partial<Record<'name' | 'phone', string>>;
 
 export default function AccountScreen() {
-  const { profile, bookings, favorites, saveProfile, clearProfile } = useAppStore();
+  const { ready, user, bookings, favorites, updateProfile, logout } = useAppStore();
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [errors, setErrors] = useState<Errors>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setName(profile?.name ?? '');
-    setEmail(profile?.email ?? '');
-    setPhone(profile?.phone ?? '');
-  }, [profile]);
+    setName(user?.name ?? '');
+    setPhone(user?.phone ?? '');
+  }, [user]);
+
+  if (!ready) return <Loading />;
+
+  const footer = (
+    <Text style={[styles.muted, { textAlign: 'center' }]}>
+      VietStay v{Constants.expoConfig?.version ?? '1.0.0'} · {API_URL}
+    </Text>
+  );
+
+  if (!user) {
+    return (
+      <Screen>
+        <LoginPrompt
+          icon="person-circle-outline"
+          title="Chào mừng đến VietStay"
+          message="Đăng nhập để đặt phòng, lưu khách sạn yêu thích và quản lý chuyến đi."
+        />
+        {footer}
+      </Screen>
+    );
+  }
 
   const save = async () => {
     const e: Errors = {};
     if (name.trim().length < 2) e.name = 'Vui lòng nhập họ tên';
-    if (!isValidEmail(email)) e.email = 'Email không hợp lệ';
     if (!isValidPhone(phone)) e.phone = 'Số điện thoại không hợp lệ';
     setErrors(e);
     if (Object.keys(e).length) return;
     setSaving(true);
-    await saveProfile({ name: name.trim(), email: email.trim(), phone: phone.trim() });
-    setSaving(false);
-    notify('Đã lưu', 'Thông tin của bạn sẽ được điền sẵn khi đặt phòng.');
+    try {
+      await updateProfile({ name: name.trim(), phone: phone.trim() });
+      notify('Đã lưu', 'Thông tin tài khoản đã được cập nhật.');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrors({ name: err.fieldErrors.name?.[0], phone: err.fieldErrors.phone?.[0] });
+        notify('Không lưu được', err.message);
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmed = bookings.filter((b) => b.status === 'confirmed').length;
@@ -42,11 +71,11 @@ export default function AccountScreen() {
     <Screen>
       <Card style={styles.header}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{(profile?.name || 'K').trim().charAt(0).toUpperCase()}</Text>
+          <Text style={styles.avatarText}>{user.name.trim().charAt(0).toUpperCase() || 'K'}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.name}>{profile?.name || 'Khách'}</Text>
-          <Text style={styles.muted}>{profile?.email || 'Chưa có thông tin liên hệ'}</Text>
+          <Text style={styles.name}>{user.name}</Text>
+          <Text style={styles.muted}>{user.email}</Text>
         </View>
       </Card>
 
@@ -64,15 +93,7 @@ export default function AccountScreen() {
       <SectionTitle>Thông tin cá nhân</SectionTitle>
       <Card style={{ gap: 12 }}>
         <TextField label="Họ và tên" value={name} onChangeText={setName} error={errors.name} placeholder="Nguyễn Văn A" />
-        <TextField
-          label="Email"
-          value={email}
-          onChangeText={setEmail}
-          error={errors.email}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          placeholder="ban@example.com"
-        />
+        <TextField label="Email" value={user.email} editable={false} style={{ color: colors.muted }} />
         <TextField
           label="Số điện thoại"
           value={phone}
@@ -84,20 +105,13 @@ export default function AccountScreen() {
         <Button title="Lưu thông tin" loading={saving} onPress={save} />
       </Card>
 
-      {profile && (
-        <Button
-          title="Xóa thông tin cá nhân"
-          variant="ghost"
-          icon="log-out-outline"
-          onPress={() =>
-            confirmAction('Xóa thông tin?', 'Thông tin liên hệ đã lưu trên thiết bị này sẽ bị xóa.', () => void clearProfile(), 'Xóa')
-          }
-        />
-      )}
-
-      <Text style={[styles.muted, { textAlign: 'center' }]}>
-        VietStay v{Constants.expoConfig?.version ?? '1.0.0'}
-      </Text>
+      <Button
+        title="Đăng xuất"
+        variant="ghost"
+        icon="log-out-outline"
+        onPress={() => confirmAction('Đăng xuất?', 'Bạn sẽ cần đăng nhập lại để đặt phòng.', () => void logout(), 'Đăng xuất')}
+      />
+      {footer}
     </Screen>
   );
 }
