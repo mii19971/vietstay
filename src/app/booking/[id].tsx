@@ -79,12 +79,12 @@ export default function BookingDetailScreen() {
 
   return (
     <Screen>
-      {created === '1' && booking.status === 'confirmed' && (
+      {created === '1' && booking.status !== 'cancelled' && (
         <View style={styles.success}>
           <Ionicons name="checkmark-circle" size={44} color={colors.success} />
-          <Text style={styles.successTitle}>Đặt phòng thành công!</Text>
+          <Text style={styles.successTitle}>Đã gửi yêu cầu đặt phòng!</Text>
           <Text style={[styles.muted, { textAlign: 'center' }]}>
-            Đơn đã được lưu trong mục Chuyến đi. Vui lòng xuất trình mã đặt phòng khi nhận phòng.
+            Khách sạn sẽ liên hệ báo giá và xác nhận phòng. Yêu cầu được lưu trong mục Chuyến đi.
           </Text>
         </View>
       )}
@@ -119,12 +119,18 @@ export default function BookingDetailScreen() {
         {!!booking.note && <Row label="Yêu cầu" value={booking.note} />}
         <Divider />
         <Row label="Thanh toán" value={payment?.label ?? ''} />
-        <Row label="Tiền phòng" value={formatVND(booking.subtotal)} />
-        <Row label="Thuế & phí" value={formatVND(booking.taxes)} />
-        <View style={styles.row}>
-          <Text style={styles.totalLabel}>Tổng cộng</Text>
-          <Text style={styles.total}>{formatVND(booking.total)}</Text>
-        </View>
+        {booking.total != null ? (
+          <>
+            {booking.subtotal != null && <Row label="Tiền phòng" value={formatVND(booking.subtotal)} />}
+            {booking.taxes != null && <Row label="Thuế & phí" value={formatVND(booking.taxes)} />}
+            <View style={styles.row}>
+              <Text style={styles.totalLabel}>Tổng cộng</Text>
+              <Text style={styles.total}>{formatVND(booking.total)}</Text>
+            </View>
+          </>
+        ) : (
+          <Row label="Giá phòng" value="Chờ khách sạn báo giá" />
+        )}
       </Card>
 
       <Button

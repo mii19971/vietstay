@@ -185,12 +185,17 @@ export function RemoteImage({ uri, style }: { uri: string; style?: StyleProp<Ima
 
 // ---------- Rating ----------
 
+/** Hạng sao, hỗ trợ nửa sao (4.5). 0 = chưa xếp hạng → không hiển thị. */
 export function Stars({ count, size = 14 }: { count: number; size?: number }) {
+  const full = Math.floor(count);
+  const half = count - full >= 0.5;
+  if (full <= 0 && !half) return null;
   return (
     <View style={{ flexDirection: 'row', gap: 1 }} accessibilityLabel={`${count} sao`}>
-      {Array.from({ length: count }, (_, i) => (
+      {Array.from({ length: full }, (_, i) => (
         <Ionicons key={i} name="star" size={size} color={colors.star} />
       ))}
+      {half && <Ionicons name="star-half" size={size} color={colors.star} />}
     </View>
   );
 }

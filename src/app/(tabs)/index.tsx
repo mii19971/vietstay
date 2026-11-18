@@ -7,17 +7,18 @@ import { HotelCard } from '@/components/HotelCard';
 import { SearchForm } from '@/components/SearchForm';
 import { Card, ErrorState, Loading, RemoteImage, Screen, SectionTitle } from '@/components/ui';
 import { useApi } from '@/hooks/useApi';
-import { getCities, getFeaturedHotels } from '@/services/api';
+import { getDestinations, getFeaturedHotels } from '@/services/api';
 import { useAppStore } from '@/store/AppStore';
 import { colors, radius } from '@/theme';
 import type { SearchCriteria } from '@/types';
 import { criteriaToParams, defaultCriteria } from '@/utils/criteria';
+import { formatNumber } from '@/utils/format';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAppStore();
   const [initial] = useState(defaultCriteria);
-  const home = useApi(() => Promise.all([getCities(), getFeaturedHotels()]), []);
+  const home = useApi(() => Promise.all([getDestinations(), getFeaturedHotels()]), []);
   const [cities, featured] = home.data ?? [[], []];
 
   const search = (c: SearchCriteria) => router.push({ pathname: '/search', params: criteriaToParams(c) });
@@ -46,7 +47,7 @@ export default function HomeScreen() {
             {cities.map((city) => (
               <Pressable
                 key={city.id}
-                onPress={() => search({ ...initial, q: city.name })}
+                onPress={() => search({ ...initial, q: city.name, regionId: city.id })}
                 accessibilityRole="button"
                 accessibilityLabel={`Tìm khách sạn ở ${city.name}`}
                 style={styles.city}
@@ -54,6 +55,7 @@ export default function HomeScreen() {
                 <RemoteImage uri={city.image} style={StyleSheet.absoluteFill} />
                 <View style={styles.cityOverlay} />
                 <Text style={styles.cityName}>{city.name}</Text>
+                <Text style={styles.cityCount}>{formatNumber(city.hotelCount)} khách sạn</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -90,4 +92,5 @@ const styles = StyleSheet.create({
   },
   cityOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.28)' },
   cityName: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  cityCount: { color: '#fff', fontSize: 12, opacity: 0.9 },
 });

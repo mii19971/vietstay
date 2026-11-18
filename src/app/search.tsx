@@ -1,34 +1,31 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { DestinationAutocomplete } from '@/components/DestinationAutocomplete';
 import { Grid } from '@/components/Grid';
 import { HotelCard } from '@/components/HotelCard';
-import { datesLabel, guestsLabel, SearchForm } from '@/components/SearchForm';
 import { Sheet } from '@/components/Sheet';
 import { Button, Chip, EmptyState, ErrorState, Loading, Screen } from '@/components/ui';
 import { AMENITIES } from '@/data/amenities';
 import { useApi } from '@/hooks/useApi';
 import { searchHotels } from '@/services/api';
-import { colors, radius } from '@/theme';
-import type { AmenityKey, SearchCriteria, SearchFilters, SortOption } from '@/types';
+import { colors } from '@/theme';
+import type { AmenityKey, SearchFilters, SortOption } from '@/types';
 import { criteriaToParams, parseCriteria } from '@/utils/criteria';
-import { nightsBetween } from '@/utils/date';
-import { formatVND } from '@/utils/format';
+import { formatNumber } from '@/utils/format';
 
 const SORTS: { key: SortOption; label: string }[] = [
   { key: 'recommended', label: 'Đề xuất' },
-  { key: 'price-asc', label: 'Giá thấp nhất' },
-  { key: 'price-desc', label: 'Giá cao nhất' },
   { key: 'rating', label: 'Đánh giá cao' },
+  { key: 'stars', label: 'Hạng sao' },
+  { key: 'name', label: 'Tên A–Z' },
 ];
 
-const PRICE_OPTIONS = [1_000_000, 1_500_000, 2_500_000, 4_000_000];
 const RATING_OPTIONS = [8, 8.5, 9];
 const EMPTY_FILTERS: SearchFilters = { amenities: [], sort: 'recommended' };
 
 function countActive(f: SearchFilters) {
-  return (f.maxPrice ? 1 : 0) + (f.minStars ? 1 : 0) + (f.minRating ? 1 : 0) + f.amenities.length;
+  return (f.minStars ? 1 : 0) + (f.minRating ? 1 : 0) + f.amenities.length;
 }
 
 export default function SearchScreen() {
@@ -36,21 +33,27 @@ export default function SearchScreen() {
   // Chỉ tính lại khi giá trị params thực sự đổi.
   const paramsKey = JSON.stringify(params);
   const criteria = useMemo(() => parseCriteria(params), [paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasTarget = !!criteria.regionId || criteria.q.trim().length >= 2;
 
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const [draft, setDraft] = useState<SearchFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
-  const [showEdit, setShowEdit] = useState(false);
-  const search = useApi(() => searchHotels(criteria, filters), [criteria, filters]);
+  // Từ khóa đang gõ trong ô tìm kiếm; chỉ áp dụng khi nhấn Enter / chọn gợi ý.
+  // Đồng bộ lại khi URL đổi (chọn gợi ý, quay lại) — cập nhật ngay trong render thay vì dùng effect.
+  const [draftQ, setDraftQ] = useState(criteria.q);
+  const [syncedQ, setSyncedQ] = useState(criteria.q);
+  if (syncedQ !== criteria.q) {
+    setSyncedQ(criteria.q);
+    setDraftQ(criteria.q);
+  }
+
+  const search = useApi(
+    () => (hasTarget ? searchHotels(criteria, filters) : Promise.resolve(undefined)),
+    [criteria, filters, hasTarget],
+  );
   const results = search.loading ? null : search.data;
-
-  const nights = nightsBetween(criteria.checkIn, criteria.checkOut);
   const activeCount = countActive(filters);
-
-  const updateCriteria = (c: SearchCriteria) => {
-    setShowEdit(false);
-    router.setParams(criteriaToParams(c));
-  };
+  const title = results?.region?.name ?? (criteria.q || 'Tìm khách sạn');
 
   const toggleAmenity = (a: AmenityKey) =>
     setDraft((d) => ({
@@ -58,22 +61,24 @@ export default function SearchScreen() {
       amenities: d.amenities.includes(a) ? d.amenities.filter((x) => x !== a) : [...d.amenities, a],
     }));
 
+  const openHotel = (id: string) =>
+    router.push({ pathname: '/hotel/[id]', params: { id, ...criteriaToParams(criteria) } });
+
   return (
     <>
-      <Stack.Screen options={{ title: criteria.q || 'Tất cả khách sạn' }} />
+      <Stack.Screen options={{ title }} />
       <Screen>
-        <Pressable style={styles.summary} onPress={() => setShowEdit(true)} accessibilityRole="button">
-          <Ionicons name="search" size={20} color={colors.primary} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.summaryTitle} numberOfLines={1}>
-              {criteria.q || 'Mọi điểm đến'}
-            </Text>
-            <Text style={styles.summarySub} numberOfLines={1}>
-              {datesLabel(criteria)} · {guestsLabel(criteria)}
-            </Text>
-          </View>
-          <Text style={styles.edit}>Sửa</Text>
-        </Pressable>
+        <DestinationAutocomplete
+          value={draftQ}
+          onChangeText={setDraftQ}
+          // Tìm theo từ khóa mới → bỏ vùng đang chọn.
+          onSubmit={() => router.setParams({ ...criteriaToParams({ ...criteria, q: draftQ.trim() }), regionId: '' })}
+          onPick={(place) =>
+            place.type === 'hotel'
+              ? openHotel(place.id)
+              : router.setParams(criteriaToParams({ ...criteria, q: place.name, regionId: place.id }))
+          }
+        />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           <Chip
@@ -95,7 +100,13 @@ export default function SearchScreen() {
           ))}
         </ScrollView>
 
-        {search.error ? (
+        {!hasTarget ? (
+          <EmptyState
+            icon="search-outline"
+            title="Bạn muốn đi đâu?"
+            message="Nhập tên thành phố, địa danh hoặc khách sạn rồi chọn một gợi ý."
+          />
+        ) : search.error ? (
           <ErrorState message={search.error} onRetry={search.reload} />
         ) : !results ? (
           <Loading />
@@ -103,7 +114,7 @@ export default function SearchScreen() {
           <EmptyState
             icon="bed-outline"
             title="Không tìm thấy khách sạn phù hợp"
-            message="Hãy thử đổi điểm đến, ngày, số khách hoặc bỏ bớt bộ lọc."
+            message="Hãy thử điểm đến khác (gõ đủ từ, vd. “da nang”) hoặc bỏ bớt bộ lọc."
             action={
               activeCount > 0 ? (
                 <Button title="Xóa bộ lọc" variant="outline" onPress={() => setFilters({ ...EMPTY_FILTERS, sort: filters.sort })} />
@@ -112,27 +123,19 @@ export default function SearchScreen() {
           />
         ) : (
           <>
-            <Text style={styles.count}>{results.total} khách sạn còn phòng</Text>
+            <Text style={styles.count}>
+              {formatNumber(results.total)} khách sạn
+              {results.region ? ` tại ${results.region.name}` : ` khớp “${criteria.q}”`}
+              {results.total > results.items.length ? ` · hiển thị ${results.items.length} đầu tiên` : ''}
+            </Text>
             <Grid
               data={results.items}
               keyOf={(h) => h.id}
-              render={(h) => (
-                <HotelCard
-                  hotel={h}
-                  nights={nights}
-                  onPress={() =>
-                    router.push({ pathname: '/hotel/[id]', params: { id: h.id, ...criteriaToParams(criteria) } })
-                  }
-                />
-              )}
+              render={(h) => <HotelCard hotel={h} onPress={() => openHotel(h.id)} />}
             />
           </>
         )}
       </Screen>
-
-      <Sheet visible={showEdit} title="Thay đổi tìm kiếm" onClose={() => setShowEdit(false)}>
-        <SearchForm key={paramsKey} initial={criteria} onSubmit={updateCriteria} submitLabel="Cập nhật" />
-      </Sheet>
 
       <Sheet
         visible={showFilters}
@@ -157,18 +160,6 @@ export default function SearchScreen() {
           </View>
         }
       >
-        <Text style={styles.filterTitle}>Giá tối đa / đêm</Text>
-        <View style={styles.wrap}>
-          {PRICE_OPTIONS.map((p) => (
-            <Chip
-              key={p}
-              label={`≤ ${formatVND(p)}`}
-              selected={draft.maxPrice === p}
-              onPress={() => setDraft((d) => ({ ...d, maxPrice: d.maxPrice === p ? undefined : p }))}
-            />
-          ))}
-        </View>
-
         <Text style={styles.filterTitle}>Hạng sao</Text>
         <View style={styles.wrap}>
           {[3, 4, 5].map((s) => (
@@ -211,19 +202,6 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  summary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  summaryTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  summarySub: { fontSize: 13, color: colors.muted },
-  edit: { color: colors.primary, fontWeight: '700' },
   count: { color: colors.muted, fontWeight: '600' },
   filterTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginTop: 4 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

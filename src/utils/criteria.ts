@@ -33,12 +33,15 @@ export function parseCriteria(params: RawParams): SearchCriteria {
   }
   const guests = clampInt(first(params.guests), 1, MAX_GUESTS, def.guests);
   const rooms = Math.min(guests, clampInt(first(params.rooms), 1, MAX_ROOMS, def.rooms));
-  return { q: first(params.q) ?? '', checkIn, checkOut, guests, rooms };
+  const regionId = first(params.regionId)?.trim() || undefined;
+  return { q: first(params.q) ?? '', regionId, checkIn, checkOut, guests, rooms };
 }
 
+/** regionId rỗng được bỏ qua để link gọn và không giữ vùng cũ khi tìm theo từ khóa mới. */
 export function criteriaToParams(c: SearchCriteria): Record<string, string> {
   return {
     q: c.q,
+    ...(c.regionId ? { regionId: c.regionId } : {}),
     checkIn: c.checkIn,
     checkOut: c.checkOut,
     guests: String(c.guests),

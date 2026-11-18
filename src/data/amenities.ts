@@ -9,10 +9,9 @@ export const AMENITIES: Record<AmenityKey, { label: string; icon: IconName }> = 
   gym: { label: 'Phòng gym', icon: 'barbell-outline' },
   restaurant: { label: 'Nhà hàng', icon: 'restaurant-outline' },
   parking: { label: 'Chỗ đỗ xe', icon: 'car-outline' },
-  breakfast: { label: 'Bữa sáng', icon: 'cafe-outline' },
+  breakfast: { label: 'Bữa sáng miễn phí', icon: 'cafe-outline' },
   airport: { label: 'Đưa đón sân bay', icon: 'airplane-outline' },
-  beach: { label: 'Gần biển', icon: 'umbrella-outline' },
-  ac: { label: 'Điều hòa', icon: 'snow-outline' },
+  beach: { label: 'Bãi biển riêng', icon: 'umbrella-outline' },
   pet: { label: 'Cho phép thú cưng', icon: 'paw-outline' },
 };
 

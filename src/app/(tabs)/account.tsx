@@ -65,7 +65,8 @@ export default function AccountScreen() {
     }
   };
 
-  const confirmed = bookings.filter((b) => b.status === 'confirmed').length;
+  // Đơn còn hiệu lực (chờ xác nhận hoặc đã xác nhận).
+  const confirmed = bookings.filter((b) => b.status !== 'cancelled').length;
 
   return (
     <Screen>

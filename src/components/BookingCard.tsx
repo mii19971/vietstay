@@ -8,6 +8,7 @@ import { RemoteImage } from './ui';
 export function bookingStatus(b: Booking): { label: string; color: string; bg: string } {
   if (b.status === 'cancelled') return { label: 'Đã hủy', color: colors.danger, bg: colors.dangerSoft };
   if (b.checkOut <= today()) return { label: 'Đã hoàn thành', color: colors.muted, bg: colors.background };
+  if (b.status === 'pending') return { label: 'Chờ xác nhận', color: colors.accent, bg: colors.primarySoft };
   return { label: 'Đã xác nhận', color: colors.success, bg: colors.successSoft };
 }
 
@@ -41,7 +42,7 @@ export function BookingCard({ booking, onPress }: { booking: Booking; onPress: (
         </Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
           <Text style={styles.code}>Mã: {booking.code}</Text>
-          <Text style={styles.total}>{formatVND(booking.total)}</Text>
+          {booking.total != null && <Text style={styles.total}>{formatVND(booking.total)}</Text>}
         </View>
       </View>
     </Pressable>

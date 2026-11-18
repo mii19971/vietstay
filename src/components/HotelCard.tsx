@@ -6,7 +6,8 @@ import { useAppStore } from '@/store/AppStore';
 import { colors, radius, shadow } from '@/theme';
 import type { HotelSummary } from '@/types';
 import { notify } from '@/utils/dialog';
-import { formatNumber, formatVND, ratingLabel } from '@/utils/format';
+import { amenityInfo } from '@/data/amenities';
+import { formatNumber, ratingLabel } from '@/utils/format';
 import { RatingBadge, RemoteImage, Stars } from './ui';
 
 export function FavoriteButton({ hotelId, size = 22 }: { hotelId: string; size?: number }) {
@@ -35,19 +36,14 @@ export function FavoriteButton({ hotelId, size = 22 }: { hotelId: string; size?:
 
 export function HotelCard({
   hotel,
-  price,
-  nights,
   onPress,
   style,
 }: {
   hotel: HotelSummary;
-  /** Giá/đêm hiển thị; mặc định là hotel.minPrice. */
-  price?: number;
-  nights?: number;
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
-  const fromPrice = price ?? hotel.minPrice;
+  const amenities = hotel.amenities.slice(0, 4);
   // Nút yêu thích là anh em (không phải con) của nút thẻ: trên web Pressable role="button"
   // render thành <button>, và HTML không cho phép <button> lồng trong <button>.
   return (
@@ -60,31 +56,40 @@ export function HotelCard({
       >
         <RemoteImage uri={hotel.image} style={styles.image} />
         <View style={styles.body}>
-          <Stars count={hotel.stars} size={12} />
+          <View style={styles.row}>
+            {!!hotel.category && <Text style={styles.category}>{hotel.category}</Text>}
+            <Stars count={hotel.stars} size={12} />
+          </View>
           <Text style={styles.name} numberOfLines={1}>
             {hotel.name}
           </Text>
           <View style={styles.row}>
             <Ionicons name="location-outline" size={14} color={colors.muted} />
             <Text style={styles.muted} numberOfLines={1}>
-              {hotel.city}
+              {hotel.address || hotel.city}
             </Text>
           </View>
           <View style={[styles.row, { marginTop: 4 }]}>
-            <RatingBadge rating={hotel.rating} />
-            <Text style={styles.ratingText}>{ratingLabel(hotel.rating)}</Text>
-            <Text style={styles.muted}>· {formatNumber(hotel.reviewCount)} đánh giá</Text>
+            {hotel.rating > 0 ? (
+              <>
+                <RatingBadge rating={hotel.rating} />
+                <Text style={styles.ratingText}>{ratingLabel(hotel.rating)}</Text>
+                <Text style={styles.muted}>· {formatNumber(hotel.reviewCount)} đánh giá</Text>
+              </>
+            ) : (
+              <Text style={styles.muted}>Chưa có đánh giá</Text>
+            )}
           </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.muted}>Từ</Text>
-            <Text style={styles.price}>{formatVND(fromPrice)}</Text>
-            <Text style={styles.muted}>/đêm</Text>
-          </View>
-          {nights && nights > 1 ? (
-            <Text style={[styles.muted, { fontSize: 12 }]}>
-              {formatVND(fromPrice * nights)} cho {nights} đêm (chưa gồm thuế)
-            </Text>
-          ) : null}
+          {amenities.length > 0 && (
+            <View style={styles.amenities}>
+              {amenities.map((a) => (
+                <View key={a} style={styles.row} accessibilityLabel={amenityInfo(a).label}>
+                  <Ionicons name={amenityInfo(a).icon} size={13} color={colors.primary} />
+                  <Text style={styles.amenityText}>{amenityInfo(a).label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </Pressable>
       <View style={styles.favWrap}>
@@ -112,6 +117,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   muted: { color: colors.muted, fontSize: 13 },
   ratingText: { fontWeight: '600', color: colors.text, fontSize: 14 },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 6 },
-  price: { fontSize: 18, fontWeight: '800', color: colors.accent },
+  category: { fontSize: 12, fontWeight: '700', color: colors.primary, textTransform: 'uppercase' },
+  amenities: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 4, marginTop: 6 },
+  amenityText: { color: colors.muted, fontSize: 12 },
 });

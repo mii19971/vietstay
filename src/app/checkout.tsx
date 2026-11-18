@@ -18,14 +18,14 @@ import {
 } from '@/components/ui';
 import { PAYMENT_METHODS } from '@/data/payment';
 import { useApi } from '@/hooks/useApi';
-import { ApiError, calcPrice, getHotel, TAX_RATE } from '@/services/api';
+import { ApiError, getHotel } from '@/services/api';
 import { useAppStore } from '@/store/AppStore';
 import { colors, radius } from '@/theme';
 import type { PaymentMethod } from '@/types';
 import { parseCriteria } from '@/utils/criteria';
 import { formatLongDate, nightsBetween } from '@/utils/date';
 import { notify } from '@/utils/dialog';
-import { formatVND, isValidEmail, isValidPhone } from '@/utils/format';
+import { isValidEmail, isValidPhone } from '@/utils/format';
 
 type Errors = Partial<Record<'name' | 'email' | 'phone', string>>;
 
@@ -87,7 +87,9 @@ export default function CheckoutScreen() {
   }
 
   const nights = nightsBetween(criteria.checkIn, criteria.checkOut);
-  const price = calcPrice(room.price, nights, criteria.rooms);
+  const fits = room.maxGuests == null || room.maxGuests * criteria.rooms >= criteria.guests;
+  const checkInFrom = hotel.policies.checkInFrom;
+  const checkOutBefore = hotel.policies.checkOutBefore;
 
   const validate = (): boolean => {
     const e: Errors = {};
@@ -118,9 +120,9 @@ export default function CheckoutScreen() {
         // Hiển thị lỗi kiểm tra của server ngay dưới ô nhập tương ứng.
         const fe = err.fieldErrors;
         setErrors({ name: fe.guestName?.[0], email: fe.guestEmail?.[0], phone: fe.guestPhone?.[0] });
-        notify(err.status === 409 ? 'Hết phòng' : 'Không thể đặt phòng', err.details);
+        notify('Không thể gửi yêu cầu', err.details);
       } else {
-        notify('Không thể đặt phòng', 'Đã có lỗi xảy ra, vui lòng thử lại.');
+        notify('Không thể gửi yêu cầu', 'Đã có lỗi xảy ra, vui lòng thử lại.');
       }
     } finally {
       setSubmitting(false);
@@ -130,7 +132,7 @@ export default function CheckoutScreen() {
   return (
     <Screen>
       <Card style={styles.summary}>
-        <RemoteImage uri={hotel.images[0] ?? ''} style={styles.thumb} />
+        <RemoteImage uri={hotel.images[0]?.thumb ?? ''} style={styles.thumb} />
         <View style={{ flex: 1, gap: 3 }}>
           <Text style={styles.hotelName}>{hotel.name}</Text>
           <Text style={styles.roomName}>{room.name}</Text>
@@ -143,13 +145,13 @@ export default function CheckoutScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.muted}>Nhận phòng</Text>
             <Text style={styles.strong}>{formatLongDate(criteria.checkIn)}</Text>
-            <Text style={styles.muted}>Từ 14:00</Text>
+            {!!checkInFrom && <Text style={styles.muted}>Từ {checkInFrom}</Text>}
           </View>
           <Ionicons name="arrow-forward" size={20} color={colors.muted} />
           <View style={{ flex: 1, alignItems: 'flex-end' }}>
             <Text style={styles.muted}>Trả phòng</Text>
             <Text style={styles.strong}>{formatLongDate(criteria.checkOut)}</Text>
-            <Text style={styles.muted}>Trước 12:00</Text>
+            {!!checkOutBefore && <Text style={styles.muted}>Trước {checkOutBefore}</Text>}
           </View>
         </View>
         <Divider />
@@ -215,31 +217,23 @@ export default function CheckoutScreen() {
         })}
       </Card>
 
-      <SectionTitle>Chi tiết giá</SectionTitle>
-      <Card style={{ gap: 8 }}>
-        <View style={styles.priceRow}>
-          <Text style={styles.muted}>
-            {formatVND(room.price)} × {nights} đêm × {criteria.rooms} phòng
+      <SectionTitle>Giá phòng</SectionTitle>
+      <Card style={{ gap: 6 }}>
+        <InfoRow icon="information-circle-outline">
+          Đây là yêu cầu đặt phòng. Khách sạn sẽ kiểm tra phòng trống và gửi giá cho bạn qua email/điện thoại trước
+          khi xác nhận. Bạn chưa phải thanh toán bây giờ.
+        </InfoRow>
+        {!fits && (
+          <Text style={styles.warning}>
+            {room.name} chỉ chứa tối đa {room.maxGuests} khách/phòng — không đủ cho {criteria.guests} khách với{' '}
+            {criteria.rooms} phòng.
           </Text>
-          <Text style={styles.text}>{formatVND(price.subtotal)}</Text>
-        </View>
-        <View style={styles.priceRow}>
-          <Text style={styles.muted}>Thuế & phí dịch vụ ({TAX_RATE * 100}%)</Text>
-          <Text style={styles.text}>{formatVND(price.taxes)}</Text>
-        </View>
-        <Divider />
-        <View style={styles.priceRow}>
-          <Text style={styles.totalLabel}>Tổng cộng</Text>
-          <Text style={styles.total}>{formatVND(price.total)}</Text>
-        </View>
-        <Text style={styles.muted}>
-          {room.freeCancellation ? '✓ Hủy miễn phí trước ngày nhận phòng.' : 'Lưu ý: loại phòng này không hoàn tiền khi hủy.'}
-        </Text>
+        )}
       </Card>
 
-      <Button title={`Xác nhận đặt phòng · ${formatVND(price.total)}`} loading={submitting} onPress={submit} />
+      <Button title="Gửi yêu cầu đặt phòng" loading={submitting} disabled={!fits} onPress={submit} />
       <Text style={[styles.muted, { textAlign: 'center' }]}>
-        Bằng việc đặt phòng, bạn đồng ý với Điều khoản sử dụng và Chính sách bảo mật của VietStay.
+        Bằng việc gửi yêu cầu, bạn đồng ý với Điều khoản sử dụng và Chính sách bảo mật của VietStay.
       </Text>
     </Screen>
   );
@@ -253,7 +247,6 @@ const styles = StyleSheet.create({
   dates: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   muted: { color: colors.muted, fontSize: 13 },
   strong: { fontSize: 15, fontWeight: '700', color: colors.text },
-  text: { fontSize: 15, color: colors.text },
   payment: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -264,7 +257,5 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   paymentSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  totalLabel: { fontSize: 17, fontWeight: '700', color: colors.text },
-  total: { fontSize: 20, fontWeight: '800', color: colors.accent },
+  warning: { color: colors.danger, fontSize: 13, fontWeight: '600' },
 });

@@ -1,13 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius } from '@/theme';
 import type { SearchCriteria } from '@/types';
-import { MAX_GUESTS, MAX_ROOMS } from '@/utils/criteria';
+import { criteriaToParams, MAX_GUESTS, MAX_ROOMS } from '@/utils/criteria';
 import { formatShortDate, nightsBetween } from '@/utils/date';
 import { DateRangePicker } from './DateRangePicker';
+import { DestinationAutocomplete } from './DestinationAutocomplete';
 import { Sheet } from './Sheet';
-import { Button, Counter, TextField, type IconName } from './ui';
+import { Button, Counter, type IconName } from './ui';
 
 export function guestsLabel(c: Pick<SearchCriteria, 'guests' | 'rooms'>) {
   return `${c.guests} khách · ${c.rooms} phòng`;
@@ -120,16 +122,22 @@ export function SearchForm({
 
   return (
     <View style={{ gap: 10 }}>
-      <TextField
-        icon="location-outline"
-        placeholder="Bạn muốn đi đâu? (thành phố, tên khách sạn)"
+      <DestinationAutocomplete
         value={criteria.q}
-        onChangeText={(q) => setCriteria((c) => ({ ...c, q }))}
-        returnKeyType="search"
-        onSubmitEditing={() => onSubmit(criteria)}
-        accessibilityLabel="Điểm đến"
+        // Gõ lại từ khóa → bỏ vùng đã chọn trước đó, tìm theo từ khóa mới.
+        onChangeText={(q) => setCriteria((c) => ({ ...c, q, regionId: undefined }))}
+        onSubmit={() => onSubmit(criteria)}
+        onPick={(place) => {
+          if (place.type === 'hotel') {
+            router.push({ pathname: '/hotel/[id]', params: { id: place.id, ...criteriaToParams(criteria) } });
+            return;
+          }
+          const next = { ...criteria, q: place.name, regionId: place.id };
+          setCriteria(next);
+          onSubmit(next);
+        }}
       />
-      <StayPickers value={criteria} onChange={setCriteria} />
+      {/* Ngày ở & số khách chỉ chọn ở trang chi tiết khách sạn; ở đây dùng mặc định (criteria.checkIn...). */}
       <Button title={submitLabel} icon="search" onPress={() => onSubmit(criteria)} />
     </View>
   );
